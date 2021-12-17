@@ -1,0 +1,4 @@
+geometry_msgs/Pose2D current_pose
+geometry_msgs/Pose2D goal_pose
+---
+nav_msgs/Path path

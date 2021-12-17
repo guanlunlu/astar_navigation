@@ -1,0 +1,47 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/gogochiou/NTHUproject_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/LiDAR_localization/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/amcl/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/base_local_planner/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/carrot_planner/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/clear_costmap_recovery/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/costmap_2d/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/costmap_converter/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/dwa_local_planner/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/global_planner/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/map_server/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/move_base_flex/mbf_abstract_core/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/move_base_flex/mbf_abstract_nav/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/move_base_flex/mbf_costmap_core/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/move_base_flex/mbf_costmap_nav/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/move_base_flex/mbf_simple_nav/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/move_base_flex/mbf_utility/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/move_base/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/move_slow_and_clear/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/nav_core/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/navfn/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/obstacle_detector/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/pose_follower/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/robot_arm/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/robot_gui/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/robot_localization/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/robot_main/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/robot_nav_node/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/rotate_recovery/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/teb_local_planner/include/**",
+        "/home/gogochiou/NTHUproject_ws/src/navigation/voxel_grid/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}
