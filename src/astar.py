@@ -99,7 +99,7 @@ class pose():
         Ecost = math.sqrt(math.pow((d_x),2) + math.pow((d_y),2))
         #Chebyshev's distance
         Ccost = min(d_x, d_y) * math.sqrt(2) + (max(d_x, d_y) - min(d_x, d_y)) * 1
-        return 0
+        return Ecost
     
 class Astar():
     def __init__(self):

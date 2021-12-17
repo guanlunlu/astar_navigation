@@ -7,9 +7,11 @@ import tf
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
 from tf import TransformListener
+from tf import TransformListener
 from std_msgs.msg import Int32MultiArray
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PointStamped
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Pose
 from std_msgs.msg import Float64MultiArray
@@ -46,28 +48,27 @@ class pathTracker():
         self.vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.goal_sub = rospy.Subscriber("move_base_simple/goal", PoseStamped, self.goalCallback)
         self.rviz_point = rospy.Publisher('/rolling_window', PoseWithCovarianceStamped, queue_size=10)
-        self.main_feedback_pub = rospy.Publisher('/plan_state', Int32MultiArray, queue_size=10)
         self.pathpub = rospy.Publisher('/path_visualize', Path, queue_size=10)
         self.tf_listener = tf.TransformListener()
-
         # pos feedback from localization
         self.curPos = pose(0,0,0)
         self.curPos_quaternion = []
         self.goalPos = pose(0,0,0)
         self.path = Path()
         self.globalPath = []
-        self.xy_tolerance = 0.02
-        self.theta_tolerance = 0.05
-        # self.linear_velocity = 0.2
-        self.linear_velocity = 0.5
-        self.angular_velocity = 0.4
-        # self.angular_velocity = 0.3
         self.last_localgoal = pose(0,0,0)
-        # pure pursuit
-        self.d_lookahead = 0.4
-        self.d_lookahead_const = 0.5
-        self.d_lookahead_K = 0.01
-        self.d_lookahead_max = 1
+
+        # Path tracking parameter
+        self.control_freqeuncy = 20
+        # Linear Parameter
+        self.k_p = 0.8
+        self.d_lookahead = 0.2
+        self.max_linear_velocity = 0.5
+        self.xy_tolerance = 0.02
+        # Angular Parameter
+        self.max_angular_velocity = 0.4
+        self.k_theta = 1
+        self.theta_tolerance = 0.05
         self.init_goal = pose(0,0,0)
         self.localgoal = pose(0,0,0)
         self.startTime = 0
@@ -111,7 +112,6 @@ class pathTracker():
             (roll, pitch, yaw) = euler_from_quaternion([i.pose.orientation.x, i.pose.orientation.y, i.pose.orientation.z, i.pose.orientation.w])
             self.globalPath.append(pose(i.pose.position.x, i.pose.position.y, yaw))
         self.rviz_pathshow(self.globalPath)
-
         self.start()
 
     def path_client(self, curPos, goalPos):
@@ -178,6 +178,14 @@ class pathTracker():
         else:
             return False
 
+    def theta_error(self,theta1, theta2):
+        curPos_vx = math.cos(theta1)
+        curPos_vy = math.sin(theta1)
+        goalPos_vx = math.cos(theta2)
+        goalPos_vy = math.sin(theta2)
+        theta_err = math.acos(curPos_vx * goalPos_vx + curPos_vy * goalPos_vy)
+        return theta_err
+
     def theta_goalReached(self,curPos, goalPos):   
         curPos_vx = math.cos(curPos.theta)
         curPos_vy = math.sin(curPos.theta)
@@ -193,70 +201,41 @@ class pathTracker():
         curGoal = self.localgoal
         print("current subgoal :"), [curGoal.x, curGoal.y]
         # self.startTime = rospy.Time.now().to_sec()
-        rate = rospy.Rate(50)
+        rate = rospy.Rate(self.control_freqeuncy)
         reached_target_range = 0
         xy_goalreached = 0
-        while not self.xy_goalReached(self.curPos, self.goalPos, self.xy_tolerance) and not rospy.is_shutdown():            
-            self.linear_velocity = 0.25 #0.5
-            self.d_lookahead = 0.3 # 0.6
 
+        while not self.xy_goalReached(self.curPos, self.goalPos, self.xy_tolerance) and not rospy.is_shutdown():            
+            linear_vel = self.distance(self.curPos, self.goalPos) * self.k_p
+            if linear_vel > self.max_linear_velocity:
+                linear_vel = self.max_linear_velocity
             if self.distance(self.goalPos, self.curPos) < self.d_lookahead + 0.1 or reached_target_range == 1:
                 curGoal = self.goalPos
-                self.linear_velocity *= 0.25
                 reached_target_range = 1
             else:
                 curGoal = self.find_localgoal(self.curPos, self.d_lookahead, self.globalPath)
-
             curGoal_base_x = math.cos(-self.curPos.theta)*(curGoal.x-self.curPos.x) - math.sin(-self.curPos.theta)*(curGoal.y-self.curPos.y)
             curGoal_base_y = math.sin(-self.curPos.theta)*(curGoal.x-self.curPos.x) + math.cos(-self.curPos.theta)*(curGoal.y-self.curPos.y)
             direct_angle = math.atan2(curGoal_base_y, curGoal_base_x)
-            # print direct_angle
-            vel_x = self.linear_velocity * math.cos(direct_angle)
-            vel_y = self.linear_velocity * math.sin(direct_angle)
-
-            if self.distance(self.curPos, pose(1, 1.75, 0)) < 0.25:
-              vel_x *= 0.3
-              vel_y *= 1
+            vel_x = linear_vel * math.cos(direct_angle)
+            vel_y = linear_vel * math.sin(direct_angle)
             self.vel_publish(vel_x, vel_y, 0)
-            # print("v_x : "), vel_x
-            # print("v_y : "), vel_y
             rate.sleep()
         print("xy goal reached")
         xy_goalreached = 1
         self.vel_publish(0, 0, 0)
 
         while xy_goalreached and not self.theta_goalReached(self.curPos, self.goalPos) and not rospy.is_shutdown():
-            # print("-----rotation-----")
-            # print ("curpos :"), (self.curPos.x, self.curPos.y, self.curPos.theta)
-            w_direction = 1
-            fake_const = 2
-            fake_x = self.goalPos.x + fake_const * math.cos(self.goalPos.theta)
-            fake_y = self.goalPos.y + fake_const * math.sin(self.goalPos.theta)
-            fake_base_x = math.cos(-self.curPos.theta)*(fake_x-self.curPos.x) - math.sin(-self.curPos.theta)*(fake_y-self.curPos.y)
-            fake_base_y = math.sin(-self.curPos.theta)*(fake_x-self.curPos.x) + math.cos(-self.curPos.theta)*(fake_y-self.curPos.y)
-            if fake_base_y < 0:
-                # turn right
-                w_direction = -1
-            else:
-                w_direction = 1
-            angular_vel = self.angular_velocity * w_direction
-
-            curPos_vx = math.cos(self.curPos.theta)
-            curPos_vy = math.sin(self.curPos.theta)
-            goalPos_vx = math.cos(self.goalPos.theta)
-            goalPos_vy = math.sin(self.goalPos.theta)
-            theta_err = math.acos(curPos_vx * goalPos_vx + curPos_vy * goalPos_vy)
-            if abs(theta_err) < math.radians(30):
-                angular_vel = 0.1
-            self.vel_publish(0, 0, angular_vel)
-            # print("w : "), angular_vel
+            vel_w = self.k_theta * self.theta_convert(self.goalPos.theta - self.curPos.theta)
+            if vel_w > self.max_angular_velocity:
+                vel_w = self.max_angular_velocity
+            # # print("w : "), angular_vel
+            self.vel_publish(0,0,vel_w)
             rate.sleep()
         print("theta goal reached"), math.degrees(self.curPos.theta)
         self.vel_publish(0,0,0)
 
     def vel_publish(self, vx, vy, w):
-        if w > 0.5:
-            w = 0.5
         msg = Twist()
         msg.linear.x = vx
         msg.linear.y = vy
