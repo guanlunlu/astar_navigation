@@ -155,7 +155,8 @@ class Astar():
         init_pose_theta = self.theta_convert(req.current_pose.theta)
         self.init_pose = pose(init_pose_x, init_pose_y, init_pose_theta, 0)
         # run astar
-        self.astar(self.init_pose, [self.goal_pose.x, self.goal_pose.y, self.goal_pose.theta])
+        # self.astar(self.init_pose, [self.goal_pose.x, self.goal_pose.y, self.goal_pose.theta])
+        self.astar(self.init_pose, self.goal_pose)
         return astar_controllerResponse(self.pathmsg)
 
     def mapCallback (self, raw_map_data):
@@ -212,15 +213,6 @@ class Astar():
         # print self.processed_mapdata
         print("Map data inflated !!")
 
-        # req = request()
-        # req.current_pose.x = 0.175
-        # req.current_pose.y = 0.175
-        # req.current_pose.theta = pi/2
-        # req.goal_pose.x = 1.75
-        # req.goal_pose.y = 1
-        # req.goal_pose.theta = pi/2
-        # self.astarCallback(req)
-
         # map visualization
         # cmap = colors.ListedColormap(['lavender','midnightblue'])
         # plt.imshow(self.processed_mapdata, cmap = cmap, origin = "lower")
@@ -243,7 +235,7 @@ class Astar():
         while queue:
             queue.sort(key=operator.attrgetter('cost'), reverse=True)
             u = queue.pop()
-            if [u.x, u.y] == [goal[0],goal[1]]:
+            if [u.x, u.y] == [goal.x, goal.y]:
                 while u is not None:
                     self.path.append([u.x, u.y, u.theta])
                     if (u.x, u.y, u.theta) == (init.x, init.y, init.theta):
@@ -260,9 +252,9 @@ class Astar():
                     queue.append(i)
 
         print "(init.x, init.y, init.theta)", (init.x, init.y, init.theta)
-        print "(goal.x, goal.y, goal.theta)", (goal[0],goal[1],goal[2])
+        print "(goal.x, goal.y, goal.theta)", (goal.x, goal.y, goal.theta)
         # print self.path
-        self.path[-1][2] = goal[2]
+        self.path[-1][2] = goal.theta
         # self.path = self.path_process(self.path)
         self.rviz_pathshow(self.path)
 
@@ -316,11 +308,6 @@ class Astar():
             pose.pose.orientation.w = quaternion[3]
             self.pathmsg.poses.append(pose)
         self.pathpub.publish(self.pathmsg)
-
-class request():
-    def __init__(self):
-        self.goal_pose = Pose2D()
-        self.current_pose = Pose2D()
 
 if __name__ == '__main__':
     rospy.init_node('astar', anonymous = True)

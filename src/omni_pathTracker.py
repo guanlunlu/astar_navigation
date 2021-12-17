@@ -41,7 +41,8 @@ class pose():
 class pathTracker():
     def __init__(self):
         # self.pose_sub = rospy.Subscriber("/odom", Odometry, self.poseCallback)
-        self.pose_sub = rospy.Subscriber("/global_filter", Odometry, self.poseCallback)
+        # self.pose_sub = rospy.Subscriber("/global_filter", Odometry, self.poseCallback)
+        self.pose_sub = rospy.Subscriber("/base_pose_ground_truth", Odometry, self.poseCallback)
         self.vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.goal_sub = rospy.Subscriber("move_base_simple/goal", PoseStamped, self.goalCallback)
         self.rviz_point = rospy.Publisher('/rolling_window', PoseWithCovarianceStamped, queue_size=10)
@@ -104,25 +105,12 @@ class pathTracker():
         yaw = self.theta_convert(yaw)
         self.goalPos = pose(goalmsg.pose.position.x, goalmsg.pose.position.y, yaw)
         print("goal received ! Heading toward "), round(goalmsg.pose.position.x, 4), round(goalmsg.pose.position.y, 4), math.degrees(round((yaw), 4))
-        if self.mission_count != 0:
-            globalPath = self.path_client(self.curPos, self.goalPos)
-            for i in globalPath.path.poses:
-                (roll, pitch, yaw) = euler_from_quaternion([i.pose.orientation.x, i.pose.orientation.y, i.pose.orientation.z, i.pose.orientation.w])
-                self.globalPath.append(pose(i.pose.position.x, i.pose.position.y, yaw))
-            self.rviz_pathshow(self.globalPath)
-            self.mission_count +=1
 
-        if self.mission_count == 0:
-            globalPath = self.path_client(self.curPos, pose(1.65,0.55,0.78))
-            for i in globalPath.path.poses:
-                (roll, pitch, yaw) = euler_from_quaternion([i.pose.orientation.x, i.pose.orientation.y, i.pose.orientation.z, i.pose.orientation.w])
-                self.globalPath.append(pose(i.pose.position.x, i.pose.position.y, yaw))
-            globalPath1 = self.path_client(pose(1.65,0.55,0.78), self.goalPos)
-            for i in globalPath1.path.poses:
-                (roll, pitch, yaw) = euler_from_quaternion([i.pose.orientation.x, i.pose.orientation.y, i.pose.orientation.z, i.pose.orientation.w])
-                self.globalPath.append(pose(i.pose.position.x, i.pose.position.y, yaw))
-            self.mission_count += 1
-            self.rviz_pathshow(self.globalPath)
+        globalPath = self.path_client(self.curPos, self.goalPos)
+        for i in globalPath.path.poses:
+            (roll, pitch, yaw) = euler_from_quaternion([i.pose.orientation.x, i.pose.orientation.y, i.pose.orientation.z, i.pose.orientation.w])
+            self.globalPath.append(pose(i.pose.position.x, i.pose.position.y, yaw))
+        self.rviz_pathshow(self.globalPath)
 
         self.start()
 
@@ -163,51 +151,6 @@ class pathTracker():
         return output
 
     def find_localgoal(self, cur_center, R, globalPath):
-        # find the localgoal in interval [a, b], then interpolate
-        # k = 1
-        # lastk = 0
-        # a = pose(0,0,0)
-        # b = pose(1000,1000,0)
-        # count = 0
-        # while b not in globalPath or self.distance(self.last_localgoal, self.goalPos) > self.distance():
-        #     for i in globalPath:
-        #         if count == 1:
-        #             lastk = 0 
-        #         lastk = k
-        #         d = self.distance(i, cur_center)
-        #         if d >= R:
-        #             k = 1
-        #         else:
-        #             k = 0
-
-        #         deltak = k - lastk
-        #         if deltak == 1:
-        #             b = i
-        #             break
-        #         count +=1
-        #     print("R = "), R
-        #     b.print_pose()
-        #     R += 0.1
-        # # self.point_publish(b)
-        # # if b not in globalPath:
-        #     # min = 1000000000000000
-        #     # for i in globalPath:
-        #     #     d = self.distance(cur_center, i)
-        #     #     if d < min:
-        #     #         min = d
-        #     #         b = i
-
-        # a = globalPath[globalPath.index(b)-1]
-        # dis = [self.distance(a, cur_center), self.distance(b, cur_center)]
-        # # print ("dis"), dis
-        # x = [a.x, b.x]
-        # y = [a.y, b.y]
-        # localgoal_x = np.interp(R, dis, x)
-        # localgoal_y = np.interp(R, dis, y)    
-        # localgoal = pose(localgoal_x, localgoal_y, a.theta)
-        # # self.show_pose(a)
-        # # self.show_pose(b)
-        # --------------
         min = 1000000000000000
 
         if self.last_localgoal not in globalPath:
@@ -222,10 +165,7 @@ class pathTracker():
                 break
         localgoal = self.globalPath[min_idx]
         self.last_localgoal = localgoal
-        # print("local goal")
-        # localgoal.print_pose()
         self.point_publish(localgoal)
-        # target = (self.path[min_idx, 0], self.path[min_idx, 1])
         return localgoal
 
     def distance(self, curPos, goalPos):
@@ -244,12 +184,7 @@ class pathTracker():
         goalPos_vx = math.cos(goalPos.theta)
         goalPos_vy = math.sin(goalPos.theta)
         theta_err = math.acos(curPos_vx * goalPos_vx + curPos_vy * goalPos_vy)
-        # self.theta_convert(theta_err)
-        # print("theta err"), math.degrees(theta_err)
-        # print("theta tolerance "), math.degrees(self.theta_tolerance)
-        # print math.degrees(theta_err)
         if abs(theta_err) < self.theta_tolerance:
-            # print("aaaaaaaaa")
             return True
         else:
             return False
@@ -261,9 +196,6 @@ class pathTracker():
         rate = rospy.Rate(50)
         reached_target_range = 0
         xy_goalreached = 0
-        main_count = 0
-        main_feedback = Int32MultiArray()
-
         while not self.xy_goalReached(self.curPos, self.goalPos, self.xy_tolerance) and not rospy.is_shutdown():            
             self.linear_velocity = 0.25 #0.5
             self.d_lookahead = 0.3 # 0.6
@@ -288,9 +220,6 @@ class pathTracker():
             self.vel_publish(vel_x, vel_y, 0)
             # print("v_x : "), vel_x
             # print("v_y : "), vel_y
-            main_count +=1
-            main_feedback.data = [0,0,main_count]
-            self.main_feedback_pub.publish(main_feedback)
             rate.sleep()
         print("xy goal reached")
         xy_goalreached = 1
@@ -321,18 +250,9 @@ class pathTracker():
                 angular_vel = 0.1
             self.vel_publish(0, 0, angular_vel)
             # print("w : "), angular_vel
-            main_count +=1
-            main_feedback.data = [0,0,main_count]
-            self.main_feedback_pub.publish(main_feedback)
             rate.sleep()
         print("theta goal reached"), math.degrees(self.curPos.theta)
         self.vel_publish(0,0,0)
-        main_count +=1
-        main_feedback.data = [1,0,main_count]
-        self.main_feedback_pub.publish(main_feedback)
-
-        if self.mission_count == 2:
-            self.theta_tolerance = 100
 
     def vel_publish(self, vx, vy, w):
         if w > 0.5:
