@@ -42,13 +42,15 @@ class pathTracker():
         self.pose_sub = rospy.Subscriber("/base_pose_ground_truth", Odometry, self.poseCallback)
         self.vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         self.goal_sub = rospy.Subscriber("move_base_simple/goal", PoseStamped, self.goalCallback)
-        self.rviz_point = rospy.Publisher('/rolling_window', PoseWithCovarianceStamped, queue_size=10)
+        self.rviz_localgoal = rospy.Publisher('/local_goal', PoseWithCovarianceStamped, queue_size=10)
+        self.rviz_robotlocus = rospy.Publisher('/robot_locus', Path, queue_size=10)
         self.pathpub = rospy.Publisher('/path_visualize', Path, queue_size=10)
         self.tf_listener = tf.TransformListener()
 
         # Robot position feedback from localization
         self.curPos = pose(0,0,0)
         self.curPos_quaternion = []
+        self.robot_locus = []
 
         # Goal request from Main and Path received from Astar node
         self.goalPos = pose(0,0,0)
@@ -65,12 +67,14 @@ class pathTracker():
         # Linear Parameter
         self.k_p = 0.8
         self.max_linear_velocity = 0.5
-        self.linear_acceleration = 0.2
+        self.linear_acceleration = 0.3
+        self.linear_brake_distance = 0.3
         self.xy_tolerance = 0.02
 
         # Angular Parameter
         self.max_angular_velocity = 0.4
-        self.angular_acceleration = 0.2
+        self.angular_acceleration = 0.3
+        self.angular_brake_distance = 0.2
         self.k_theta = 1
         self.theta_tolerance = 0.03
 
@@ -96,21 +100,25 @@ class pathTracker():
                       data.pose.pose.orientation.z, data.pose.pose.orientation.w]
         roll, pitch, yaw = euler_from_quaternion(self.curPos_quaternion)
         self.curPos.theta = self.theta_convert(yaw)
+        self.robot_locus.append(self.curPos)
 
     def goalCallback(self, goalmsg):
         del self.globalPath[:]
+        # del self.robot_locus[:]
         quaternion = [goalmsg.pose.orientation.x, goalmsg.pose.orientation.y,
                       goalmsg.pose.orientation.z, goalmsg.pose.orientation.w]
         roll, pitch, yaw = euler_from_quaternion(quaternion)
         yaw = self.theta_convert(yaw)
         self.goalPos = pose(goalmsg.pose.position.x, goalmsg.pose.position.y, yaw)
-        print("goal received ! Heading toward "), round(goalmsg.pose.position.x, 4), round(goalmsg.pose.position.y, 4), math.degrees(round((yaw), 4))
+        print("=================================================================")
+        print("goal received ! Heading toward "), (round(goalmsg.pose.position.x, 4), round(goalmsg.pose.position.y, 4), round(math.degrees(yaw),4))
 
         globalPath = self.path_client(self.curPos, self.goalPos)
         for i in globalPath.path.poses:
             (roll, pitch, yaw) = euler_from_quaternion([i.pose.orientation.x, i.pose.orientation.y, i.pose.orientation.z, i.pose.orientation.w])
             self.globalPath.append(pose(i.pose.position.x, i.pose.position.y, yaw))
         self.rviz_pathshow(self.globalPath)
+        print("Path received form Astar node !")
         self.start()
 
     def path_client(self, curPos, goalPos):
@@ -182,7 +190,6 @@ class pathTracker():
 
         a = globalPath[globalPath.index(b)-1]
         dis = [self.distance(a, cur_center), self.distance(b, cur_center)]
-        # print ("dis"), dis
         x = [a.x, b.x]
         y = [a.y, b.y]
         localgoal_x = np.interp(R, dis, x)
@@ -202,8 +209,8 @@ class pathTracker():
         #         break
         # localgoal = self.globalPath[min_idx]
         # self.last_localgoal = localgoal
-        # self.point_publish(localgoal)
-        
+        self.point_publish(localgoal)
+
         return localgoal
 
     def distance(self, curPos, goalPos):
@@ -264,8 +271,8 @@ class pathTracker():
         linear_vel = 0
         angular_vel = 0
         rotate_direction = 1
-
-        # xy position tracking
+        print("Start Tracking Path")
+        # -----------xy position tracking-----------
         while not self.xy_goalReached(self.curPos, self.goalPos, self.xy_tolerance) and not rospy.is_shutdown():
             # Get current local goal from rolling window method
             if self.distance(self.goalPos, self.curPos) < self.d_lookahead + 0.1 or reached_target_range == 1:
@@ -280,18 +287,19 @@ class pathTracker():
             curGoal_base_y = math.sin(-self.curPos.theta)*(curGoal.x-self.curPos.x) + math.cos(-self.curPos.theta)*(curGoal.y-self.curPos.y)
 
             # Calculate velocity vector toward current local goal
-            linear_vel = self.velocity_profile("linear", self.curPos, self.goalPos, linear_vel, self.max_linear_velocity, self.linear_acceleration, self.control_freqeuncy, 0.3)
+            linear_vel = self.velocity_profile("linear", self.curPos, self.goalPos, linear_vel, self.max_linear_velocity, self.linear_acceleration, self.control_freqeuncy, self.linear_brake_distance)
             direct_angle = math.atan2(curGoal_base_y, curGoal_base_x)
             vel_x = linear_vel * math.cos(direct_angle)
             vel_y = linear_vel * math.sin(direct_angle)
             self.vel_publish(vel_x, vel_y, 0)
+            self.robot_locus_show(self.robot_locus)
             rate.sleep()
 
-        print("xy goal reached")
         xy_goalreached = 1
         self.vel_publish(0, 0, 0)
-
-        # Calculate rotate direction
+        print("xy goal reached")
+        print("Start tracking orientation")
+        # -----------Calculate rotate direction-----------
         fake_const = 2
         fake_x = self.goalPos.x + fake_const * math.cos(self.goalPos.theta)
         fake_y = self.goalPos.y + fake_const * math.sin(self.goalPos.theta)
@@ -302,15 +310,16 @@ class pathTracker():
             rotate_direction = -1
         else:
             rotate_direction = 1
-        print("rotate direction"), rotate_direction
+        # print("rotate direction"), rotate_direction
 
-        # Orientation tracking, while xy goal reached
+        # ------Orientation tracking, while xy goal reached--------
         while xy_goalreached and not self.theta_goalReached(self.curPos, self.goalPos) and not rospy.is_shutdown():
-            angular_vel = self.velocity_profile("angular", self.curPos, self.goalPos, angular_vel, self.max_angular_velocity, rotate_direction * self.angular_acceleration, self.control_freqeuncy, 0.3)
+            angular_vel = self.velocity_profile("angular", self.curPos, self.goalPos, angular_vel, self.max_angular_velocity, rotate_direction * self.angular_acceleration, self.control_freqeuncy, self.angular_brake_distance)
             self.vel_publish(0,0,angular_vel)
             rate.sleep()
         
         print("theta goal reached"), math.degrees(self.curPos.theta)
+        print("Goal reached !!!!")
         self.vel_publish(0,0,0)
 
     def vel_publish(self, vx, vy, w):
@@ -342,7 +351,7 @@ class pathTracker():
                                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                                    0.0, 0.0, 0.0, 0.0, 0.0, 0.2]
-        self.rviz_point.publish(pos_msg)
+        self.rviz_localgoal.publish(pos_msg)
 
     def rviz_pathshow(self, astar_output):
         # visualize astar
@@ -361,7 +370,24 @@ class pathTracker():
             pose.pose.orientation.w = quaternion[3]
             pathmsg.poses.append(pose)
         self.pathpub.publish(pathmsg)
-      
+
+    def robot_locus_show(self, astar_output):
+        pathmsg = Path()
+        pathmsg.header.frame_id = "map"
+        pathmsg.header.stamp = rospy.Time.now()
+        for i in astar_output:
+            pose = PoseStamped()
+            pose.pose.position.x = i.x
+            pose.pose.position.y = i.y
+            pose.pose.position.z = 0
+            quaternion = quaternion_from_euler(0, 0, i.theta)
+            pose.pose.orientation.x = quaternion[0]
+            pose.pose.orientation.y = quaternion[1]
+            pose.pose.orientation.z = quaternion[2]
+            pose.pose.orientation.w = quaternion[3]
+            pathmsg.poses.append(pose)
+        self.rviz_robotlocus.publish(pathmsg)
+
 if __name__ == '__main__':
     rospy.init_node('pure_pursuit', anonymous = True)
     rate = rospy.Rate(10)
