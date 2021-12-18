@@ -224,6 +224,7 @@ class pathTracker():
         xy_goalreached = 0
         linear_vel = 0
         angular_vel = 0
+        rotate_direction = 1
 
         # xy position tracking
         while not self.xy_goalReached(self.curPos, self.goalPos, self.xy_tolerance) and not rospy.is_shutdown():
@@ -251,9 +252,22 @@ class pathTracker():
         xy_goalreached = 1
         self.vel_publish(0, 0, 0)
 
+        # Calculate rotate direction
+        fake_const = 2
+        fake_x = self.goalPos.x + fake_const * math.cos(self.goalPos.theta)
+        fake_y = self.goalPos.y + fake_const * math.sin(self.goalPos.theta)
+        fake_base_x = math.cos(-self.curPos.theta)*(fake_x-self.curPos.x) - math.sin(-self.curPos.theta)*(fake_y-self.curPos.y)
+        fake_base_y = math.sin(-self.curPos.theta)*(fake_x-self.curPos.x) + math.cos(-self.curPos.theta)*(fake_y-self.curPos.y)
+        if fake_base_y < 0:
+            # turn right
+            rotate_direction = -1
+        else:
+            rotate_direction = 1
+        print("rotate direction"), rotate_direction
+
         # Orientation tracking, while xy goal reached
         while xy_goalreached and not self.theta_goalReached(self.curPos, self.goalPos) and not rospy.is_shutdown():
-            angular_vel = self.velocity_profile("angular", self.curPos, self.goalPos, angular_vel, self.max_angular_velocity, self.angular_acceleration, self.control_freqeuncy, 0.3)
+            angular_vel = self.velocity_profile("angular", self.curPos, self.goalPos, angular_vel, self.max_angular_velocity, rotate_direction * self.angular_acceleration, self.control_freqeuncy, 0.3)
             self.vel_publish(0,0,angular_vel)
             rate.sleep()
         
