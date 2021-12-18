@@ -150,20 +150,59 @@ class pathTracker():
         return output
 
     def find_localgoal(self, cur_center, R, globalPath):
-        min = 1000000000000000
-        if self.last_localgoal not in globalPath:
-            self.last_localgoal = globalPath[0]
+        # find the localgoal in interval [a, b], then interpolate
+        k = 1
+        lastk = 0
+        a = pose(0,0,0)
+        b = pose(1000,1000,0)
+        count = 0
+        for i in globalPath:
+            if count == 1:
+                lastk = 0 
+            lastk = k
+            d = self.distance(i, cur_center)
+            if d >= R:
+                k = 1
+            else:
+                k = 0
 
-        for i in range(globalPath.index(self.last_localgoal), len(globalPath)):
-            dist = self.distance(globalPath[i], cur_center)
-            # dist = (x - self.path[i, 0])**2 + (y - self.path[i, 1])
-            if dist >= R:
-                min_idx = i
-                min_dist = dist
+            deltak = k - lastk
+            if deltak == 1:
+                b = i
                 break
-        localgoal = self.globalPath[min_idx]
-        self.last_localgoal = localgoal
-        self.point_publish(localgoal)
+            count +=1
+        
+        if b not in globalPath:
+            min = 1000000000000000
+            for i in globalPath:
+                d = self.distance(cur_center, i)
+                if d < min:
+                    min = d
+                    b = i
+
+        a = globalPath[globalPath.index(b)-1]
+        dis = [self.distance(a, cur_center), self.distance(b, cur_center)]
+        # print ("dis"), dis
+        x = [a.x, b.x]
+        y = [a.y, b.y]
+        localgoal_x = np.interp(R, dis, x)
+        localgoal_y = np.interp(R, dis, y)    
+        localgoal = pose(localgoal_x, localgoal_y, a.theta)
+
+        # min = 1000000000000000
+        # if self.last_localgoal not in globalPath:
+        #     self.last_localgoal = globalPath[0]
+
+        # for i in range(globalPath.index(self.last_localgoal), len(globalPath)):
+        #     dist = self.distance(globalPath[i], cur_center)
+        #     # dist = (x - self.path[i, 0])**2 + (y - self.path[i, 1])
+        #     if dist >= R:
+        #         min_idx = i
+        #         min_dist = dist
+        #         break
+        # localgoal = self.globalPath[min_idx]
+        # self.last_localgoal = localgoal
+        # self.point_publish(localgoal)
         
         return localgoal
 
