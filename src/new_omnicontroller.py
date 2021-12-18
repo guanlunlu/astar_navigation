@@ -214,7 +214,7 @@ class pathTracker():
         #     if d >= R:
         #         k = 1
         #     else:
-        #         k = 0
+        #         k = 0 
 
         #     deltak = k - lastk
         #     if deltak == 1:
