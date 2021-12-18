@@ -7,21 +7,16 @@ import tf
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
 from tf import TransformListener
-from tf import TransformListener
 from std_msgs.msg import Int32MultiArray
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import PointStamped
 from geometry_msgs.msg import Twist
-from geometry_msgs.msg import Pose
-from std_msgs.msg import Float64MultiArray
-from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Pose2D
 from nav_msgs.msg import Path
 from nav_msgs.msg import Odometry
 from itertools import chain
 import numpy as np
-import csv
 pi = math.pi
 
 class pose():
@@ -38,7 +33,7 @@ class pose():
             return self.x == other.x and self.y == other.y
 
     def print_pose(self):
-        print "(x,y,theta) = ",(self.x, self.y, self.theta)
+        print ("(x,y,theta) = "),(self.x, self.y, self.theta)
 
 class pathTracker():
     def __init__(self):
@@ -50,9 +45,12 @@ class pathTracker():
         self.rviz_point = rospy.Publisher('/rolling_window', PoseWithCovarianceStamped, queue_size=10)
         self.pathpub = rospy.Publisher('/path_visualize', Path, queue_size=10)
         self.tf_listener = tf.TransformListener()
-        # pos feedback from localization
+
+        # Robot position feedback from localization
         self.curPos = pose(0,0,0)
         self.curPos_quaternion = []
+
+        # Goal request from Main and Path received from Astar node
         self.goalPos = pose(0,0,0)
         self.path = Path()
         self.globalPath = []
@@ -60,20 +58,21 @@ class pathTracker():
 
         # Path tracking parameter
         self.control_freqeuncy = 20
+
+        # Rolling Window Parameter
+        self.d_lookahead = 0.2
+
         # Linear Parameter
         self.k_p = 0.8
-        self.d_lookahead = 0.2
         self.max_linear_velocity = 0.5
+        self.linear_acceleration = 0.2
         self.xy_tolerance = 0.02
+
         # Angular Parameter
         self.max_angular_velocity = 0.4
+        self.angular_acceleration = 0.2
         self.k_theta = 1
-        self.theta_tolerance = 0.05
-        self.init_goal = pose(0,0,0)
-        self.localgoal = pose(0,0,0)
-        self.startTime = 0
-        self.d_t = 0.1
-        self.mission_count =0
+        self.theta_tolerance = 0.03
 
     def start(self):
         while 1:
@@ -82,13 +81,13 @@ class pathTracker():
                 break
         # find the closest point on global path, set as first local goal
         min = 1000000000000000
+        init_local_goal = pose(0,0,0)
         for i in self.globalPath:
             d = self.distance(self.curPos, i)
             if d < min:
                 min = d
-                self.init_goal = i
-        self.localgoal = self.init_goal
-        self.controller()
+                init_local_goal = i
+        self.controller(init_local_goal)
 
     def poseCallback(self, data):
         self.curPos.x = data.pose.pose.position.x
@@ -152,7 +151,6 @@ class pathTracker():
 
     def find_localgoal(self, cur_center, R, globalPath):
         min = 1000000000000000
-
         if self.last_localgoal not in globalPath:
             self.last_localgoal = globalPath[0]
 
@@ -166,6 +164,7 @@ class pathTracker():
         localgoal = self.globalPath[min_idx]
         self.last_localgoal = localgoal
         self.point_publish(localgoal)
+        
         return localgoal
 
     def distance(self, curPos, goalPos):
@@ -187,51 +186,77 @@ class pathTracker():
         return theta_err
 
     def theta_goalReached(self,curPos, goalPos):   
-        curPos_vx = math.cos(curPos.theta)
-        curPos_vy = math.sin(curPos.theta)
-        goalPos_vx = math.cos(goalPos.theta)
-        goalPos_vy = math.sin(goalPos.theta)
-        theta_err = math.acos(curPos_vx * goalPos_vx + curPos_vy * goalPos_vy)
+        theta_err = self.theta_error(curPos.theta, goalPos.theta)
         if abs(theta_err) < self.theta_tolerance:
             return True
         else:
             return False
 
-    def controller(self):
-        curGoal = self.localgoal
-        print("current subgoal :"), [curGoal.x, curGoal.y]
-        # self.startTime = rospy.Time.now().to_sec()
+    def velocity_profile(self, mode, curPos, goalPos, last_vel, max_vel, accel, control_freq, brake_distance):
+        if mode == "linear":
+            d_vel = accel / control_freq
+            output_vel = last_vel + d_vel
+            
+            if self.distance(curPos, goalPos) < brake_distance:
+                output_vel = self.distance(curPos, goalPos) * self.k_p
+
+            if output_vel > max_vel:
+                output_vel = max_vel
+
+            return output_vel
+        
+        elif mode == "angular":
+            d_vel = accel / control_freq
+            output_vel = last_vel + d_vel
+
+            if self.theta_error(curPos.theta, goalPos.theta) < brake_distance:
+                output_vel = self.k_theta * self.theta_convert(self.goalPos.theta - self.curPos.theta)
+
+            if abs(output_vel) > abs(max_vel):
+                output_vel = np.sign(output_vel) * max_vel
+
+            return output_vel
+
+    def controller(self, init_localgoal):
+        curGoal = init_localgoal
         rate = rospy.Rate(self.control_freqeuncy)
         reached_target_range = 0
         xy_goalreached = 0
+        linear_vel = 0
+        angular_vel = 0
 
-        while not self.xy_goalReached(self.curPos, self.goalPos, self.xy_tolerance) and not rospy.is_shutdown():            
-            linear_vel = self.distance(self.curPos, self.goalPos) * self.k_p
-            if linear_vel > self.max_linear_velocity:
-                linear_vel = self.max_linear_velocity
+        # xy position tracking
+        while not self.xy_goalReached(self.curPos, self.goalPos, self.xy_tolerance) and not rospy.is_shutdown():
+            # Get current local goal from rolling window method
             if self.distance(self.goalPos, self.curPos) < self.d_lookahead + 0.1 or reached_target_range == 1:
+                # Set global goal as current local goal, if robot reached in the range of global goal once
                 curGoal = self.goalPos
                 reached_target_range = 1
             else:
                 curGoal = self.find_localgoal(self.curPos, self.d_lookahead, self.globalPath)
+
+            # Transform current goal coordinate from "map" to "base_footprint" frame.
             curGoal_base_x = math.cos(-self.curPos.theta)*(curGoal.x-self.curPos.x) - math.sin(-self.curPos.theta)*(curGoal.y-self.curPos.y)
             curGoal_base_y = math.sin(-self.curPos.theta)*(curGoal.x-self.curPos.x) + math.cos(-self.curPos.theta)*(curGoal.y-self.curPos.y)
+
+            # Calculate velocity vector toward current local goal
+            linear_vel = self.velocity_profile("linear", self.curPos, self.goalPos, linear_vel, self.max_linear_velocity, self.linear_acceleration, self.control_freqeuncy, 0.3)
             direct_angle = math.atan2(curGoal_base_y, curGoal_base_x)
             vel_x = linear_vel * math.cos(direct_angle)
             vel_y = linear_vel * math.sin(direct_angle)
             self.vel_publish(vel_x, vel_y, 0)
             rate.sleep()
+
         print("xy goal reached")
         xy_goalreached = 1
         self.vel_publish(0, 0, 0)
 
+        # Orientation tracking, while xy goal reached
         while xy_goalreached and not self.theta_goalReached(self.curPos, self.goalPos) and not rospy.is_shutdown():
-            vel_w = self.k_theta * self.theta_convert(self.goalPos.theta - self.curPos.theta)
-            if vel_w > self.max_angular_velocity:
-                vel_w = self.max_angular_velocity
-            # # print("w : "), angular_vel
-            self.vel_publish(0,0,vel_w)
+            angular_vel = self.velocity_profile("angular", self.curPos, self.goalPos, angular_vel, self.max_angular_velocity, self.angular_acceleration, self.control_freqeuncy, 0.3)
+            self.vel_publish(0,0,angular_vel)
             rate.sleep()
+        
         print("theta goal reached"), math.degrees(self.curPos.theta)
         self.vel_publish(0,0,0)
 
