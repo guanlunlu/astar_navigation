@@ -19,7 +19,7 @@
   * 同時追蹤機器人面向及路徑版本（邊走邊旋轉）
 
     ```
-    rosrun astar_nav omni_pathTracker.py
+    rosrun astar_nav holonomic_pathTracker.py
     ```
 
 ---
