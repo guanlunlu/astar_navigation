@@ -8,14 +8,20 @@ project(astar_nav)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  cv_bridge
+  geometry_msgs
+  nodelet
   roscpp
   rospy
+  sensor_msgs
   std_msgs
-  message_generation
-  geometry_msgs
+  tf
+  tf2
+  tf2_geometry_msgs
+  tf2_ros
   nav_msgs
+  message_generation
 )
-
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -108,12 +114,10 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES astar_nav
-#  CATKIN_DEPENDS roscpp rospy std_msgs
+#  LIBRARIES tracking_pose
+   CATKIN_DEPENDS cv_bridge geometry_msgs nodelet roscpp rospy sensor_msgs std_msgs tf tf2 tf2_geometry_msgs tf2_ros message_runtime
 #  DEPENDS system_lib
-  CATKIN_DEPENDS message_runtime
 )
-
 ###########
 ## Build ##
 ###########
@@ -121,10 +125,9 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
 )
-
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/astar_nav.cpp
@@ -209,3 +212,11 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+
+add_executable(euro_astar src/euro_astar.cpp)
+target_link_libraries(euro_astar ${catkin_LIBRARIES})
+add_library(astar_lib
+            src/astar_fcn.cpp
+)
+target_link_libraries(euro_astar astar_lib ${catkin_LIBRARIES})
