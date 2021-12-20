@@ -230,7 +230,7 @@ public:
 	 * @return true
 	 * @return false
 	 */
-	bool answerPath(tracking_pose::astar_controller::Request &req, tracking_pose::astar_controller::Response &res);
+	bool answerPath(astar_nav::astar_controller::Request &req, astar_nav::astar_controller::Response &res);
 };
 
 #endif

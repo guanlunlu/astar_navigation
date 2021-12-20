@@ -11,14 +11,19 @@
 
 #include "astar.h"
 
+
+
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "find_path");
 
+    // cout << "start running\n";
     Node initNode;
-
+    // cout << "init\n";
     while (!Node::mapBuilt)
         ros::spinOnce();
+    // cout << "MapBuilt\n";
     while (ros::ok())
         ros::spinOnce();
 }

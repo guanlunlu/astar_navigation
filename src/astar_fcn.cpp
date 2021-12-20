@@ -116,6 +116,8 @@ void Node::initMap(const nav_msgs::MapMetaData::ConstPtr &mapData)
     Node::mapRes = mapData->resolution;
     Node::mapX = mapData->width;
     Node::mapY = mapData->height;
+
+    // cout << "start init map \n";
     Node::mapInformation = (struct MapInformation **)malloc(sizeof(struct MapInformation *) * Node::mapX);
     for (int i = 0; i < Node::mapX; i++)
     {
@@ -123,6 +125,7 @@ void Node::initMap(const nav_msgs::MapMetaData::ConstPtr &mapData)
     }
 
     Node::mapInit = 1;
+    // cout << "end init map\n";
 }
 
 /**
@@ -136,10 +139,10 @@ void Node::setMap(const nav_msgs::OccupancyGrid::ConstPtr &map)
     {
 
         // //cout << "start building map\n";
-        file2 = fopen("/home/louis/Desktop/map.csv", "w+");
-        file = fopen("/home/louis/Desktop/obstacle.csv", "w+");
-        for (int y = 0; y < mapY; y++)
-            for (int x = 0; x < mapX; x++)
+        // file2 = fopen("/home/louis/Desktop/map.csv", "w+");
+        // file = fopen("/home/louis/Desktop/obstacle.csv", "w+");
+        for (int y = 0; y < this->mapY; y++)
+            for (int x = 0; x < this->mapX; x++)
             {
                 // double x_position = this->originX + x * Node::distanceBetweenNode;
                 // double y_position = this->originY + y * Node::distanceBetweenNode;
@@ -149,11 +152,12 @@ void Node::setMap(const nav_msgs::OccupancyGrid::ConstPtr &map)
                 Node::mapInformation[x][y].y = y_position;
                 Node::mapInformation[x][y].obstacleExist = map->data[this->mapX * y + x];
             }
-        for (int y = 0; y < mapY; y++)
-            for (int x = 0; x < mapX; x++)
+        for (int y = 0; y < this->mapY; y++)
+            for (int x = 0; x < this->mapX; x++)
                 if (map->data[this->mapX * y + x] == 100 || map->data[this->mapX * y + x] == -1)
                     for (int dx = 3; dx >= -3; dx--)
                         for (int dy = 3; dy >= -3; dy--)
+                        // inflat 3 - (-3) times
                         {
                             int tempX = x - dx;
                             int tempY = y - dy;
@@ -164,11 +168,11 @@ void Node::setMap(const nav_msgs::OccupancyGrid::ConstPtr &map)
         {
             for (int x = 0; x < this->mapX; x++)
             {
-                fprintf(file, "%d,", Node::mapInformation[x][y].obstacleExist);
-                fprintf(file2, "%lf %lf,", Node::mapInformation[x][y].x, Node::mapInformation[x][y].y);
+                // fprintf(file, "%d,", Node::mapInformation[x][y].obstacleExist);
+                // fprintf(file2, "%lf %lf,", Node::mapInformation[x][y].x, Node::mapInformation[x][y].y);
             }
-            fprintf(file, "\n");
-            fprintf(file2, "\n");
+            // fprintf(file, "\n");
+            // fprintf(file2, "\n");
         }
         Node::mapBuilt = 1;
         // cout << "end building map! \n";
@@ -183,7 +187,7 @@ void Node::setMap(const nav_msgs::OccupancyGrid::ConstPtr &map)
  * @return true
  * @return false
  */
-static bool Node::costComparator(const Node nodeA, const Node nodeB)
+bool Node::costComparator(const Node nodeA, const Node nodeB)
 {
     return nodeA.costEstimatedToGoal > nodeB.costEstimatedToGoal;
 }
@@ -196,7 +200,7 @@ static bool Node::costComparator(const Node nodeA, const Node nodeB)
  * @param goal_y target tracking
  * @return vector<Node> which is a list of possible Successor containg pose、 orientation and history path
  */
-static vector<Node> Node::getSuccessor(Node nowNode, double goal_x, double goal_y)
+vector<Node> Node::getSuccessor(Node nowNode, double goal_x, double goal_y)
 {
     int nextX;
     int nextY;
@@ -222,7 +226,7 @@ static vector<Node> Node::getSuccessor(Node nowNode, double goal_x, double goal_
                 {
                     if (*(act.end() - 1) != which_direction)
                         //     //heuristicCost += (45 / 360) * 2 * M_PI / 10;
-                        heuristicCost *= 1.005;
+                        heuristicCost *= 1.5;
                 }
                 vector<pair<int, int>> fromWhere = nowNode.path;
                 fromWhere.push_back(make_pair(nextX, nextY));
@@ -277,7 +281,7 @@ void Node::showMap(double goal_x, double goal_y)
  * @param goalY
  * @return Node, the final target point with history path, which is the target path
  */
-static Node Node::findPath(double initX, double initY, double goalX, double goalY)
+Node Node::findPath(double initX, double initY, double goalX, double goalY)
 {
     double pq_time_accumulate = 0;
     double succ_time_accumulate = 0;
@@ -323,7 +327,9 @@ static Node Node::findPath(double initX, double initY, double goalX, double goal
         else
         {
             nowNode.path.push_back(make_pair(nowNode.xIndexAtMap, nowNode.yIndexAtMap));
-            ;
+            clock_t end = clock();
+
+            cout << "time cost = " << (double)(end - start)/ CLOCKS_PER_SEC * 1000.0  << "ms. "<< endl;
             Node::expandCount = 0;
             Node::nodeVisitedAmount = 0;
             int count = 0;
@@ -358,7 +364,7 @@ vector<pair<double, double>> Node::indexToMap(vector<pair<int, int>> index)
  * @return true
  * @return false
  */
-bool Node::answerPath(tracking_pose::astar_controller::Request &req, tracking_pose::astar_controller::Response &res)
+bool Node::answerPath(astar_nav::astar_controller::Request &req, astar_nav::astar_controller::Response &res)
 {
     // system("clear");
     // cout << "Using A* to find path" << endl;
