@@ -141,8 +141,10 @@ class pathTracker():
         goal_pos.theta = goalPos.theta
         rospy.wait_for_service('path')
         try:
+            # print("time 0"), rospy.get_time()
             path = rospy.ServiceProxy('path', astar_controller)
             respond_path = path(cur_pos, goal_pos)
+            # print("time 1"), rospy.get_time()
             return respond_path
         except rospy.ServiceException as e:
             print("Service call failed: %s"%e)
