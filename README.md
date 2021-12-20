@@ -3,6 +3,25 @@
 此套全向底盤控制器是我基於 **Differential Drive Pure Pursuit Controller** 的概念作為發想，應用於全向移動底盤，
 以下為我於動機系畢業專題的實做發式，若有錯誤之處可以提出一同討論。
 
+* A* Global planner
+
+    ```
+    rosrun astar_nav astar.py
+    ```
+
+* Path Tracking Controller 
+  * 路徑追蹤完成後，才追蹤機器人面向版本
+
+    ```
+    rosrun astar_nav omni_pathTracker.py
+    ```
+
+  * 同時追蹤機器人面向及路徑版本（邊走邊旋轉）
+
+    ```
+    rosrun astar_nav omni_pathTracker.py
+    ```
+
 ---
 
 ## **基本概念**
