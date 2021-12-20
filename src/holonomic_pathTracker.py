@@ -74,9 +74,9 @@ class pathTracker():
         self.xy_tolerance = 0.02
 
         # Angular Parameter
-        self.max_angular_velocity = 0.4
-        self.angular_acceleration = 0.3
-        self.angular_brake_distance = 0.2
+        self.max_angular_velocity = 0.6
+        self.angular_acceleration = 0.4
+        self.angular_brake_distance = 0.35
         self.k_theta = 1
         self.theta_tolerance = 0.03
 
