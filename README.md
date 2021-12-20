@@ -57,7 +57,7 @@ Fig 1. Concept of rolling window Method
 #### **加速速度規劃**
 加速段的速度規劃以梯形曲線實現，根據給定加速度、最大速度進行實做
 
-<img src="images/49e952d985b1e810429b8539abaf909d7e779a8f97d2adf4f41947347f9ae8d5.png" alt="drawing" style="width:300px;"/>
+<img src="images/49e952d985b1e810429b8539abaf909d7e779a8f97d2adf4f41947347f9ae8d5.png" alt="draw" style="width:300px;"/>
 
 Fig 2. Velocity Profile
 
