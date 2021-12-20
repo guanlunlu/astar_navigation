@@ -28,8 +28,7 @@
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/Pose2D.h>
 #include "time.h"
-#include "tracking_pose/ask_path.h"
-#include "tracking_pose/astar_controller.h"
+#include "astar_nav/astar_controller.h"
 
 using namespace std;
 
