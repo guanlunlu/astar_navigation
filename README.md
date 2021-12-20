@@ -88,6 +88,7 @@ self.xy_tolerance = 0.02
 ---
 
 ## **Tracking robot Orientation**
+和上述 **linear velocity** 所使用的速度規劃方式相同，以 P control 的方式進行角度追蹤，實做如下：
 ``` python
 # ------Orientation tracking, while xy goal reached--------
 while xy_goalreached and not self.theta_goalReached(self.curPos, self.goalPos) and not rospy.is_shutdown():
